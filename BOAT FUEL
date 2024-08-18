@@ -1,0 +1,187 @@
+package com.example.fueltracker;
+
+import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+
+public class DatabaseHelper extends SQLiteOpenHelper {
+    private static final String DATABASE_NAME = "FuelTracker.db";
+    private static final int DATABASE_VERSION = 1;
+
+    public static final String TABLE_BOATS = "boats";
+    public static final String TABLE_TRIPS = "trips";
+
+    public DatabaseHelper(Context context) {
+        super(context, DATABASE_NAME, null, DATABASE_VERSION);
+    }
+
+    @Override
+    public void onCreate(SQLiteDatabase db) {
+        // Create boats table
+        String createBoatsTable = "CREATE TABLE " + TABLE_BOATS + " (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "boat_name TEXT, " +
+                "fuel_picked INTEGER, " +
+                "fuel_remaining INTEGER);";
+        db.execSQL(createBoatsTable);
+
+        // Create trips table
+        String createTripsTable = "CREATE TABLE " + TABLE_TRIPS + " (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "boat_id INTEGER, " +
+                "trip_date TEXT, " +
+                "fuel_consumed INTEGER, " +
+                "FOREIGN KEY(boat_id) REFERENCES boats(id));";
+        db.execSQL(createTripsTable);
+    }
+
+    @Override
+    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_BOATS);
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_TRIPS);
+        onCreate(db);
+    }
+}
+package com.example.fueltracker;
+
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
+
+public class MainActivity extends AppCompatActivity {
+    private DatabaseHelper dbHelper;
+    private EditText boatNameInput, fuelPickedInput, fuelConsumedInput, tripDateInput;
+    private Button addFuelButton, logTripButton;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        dbHelper = new DatabaseHelper(this);
+
+        boatNameInput = findViewById(R.id.boatNameInput);
+        fuelPickedInput = findViewById(R.id.fuelPickedInput);
+        fuelConsumedInput = findViewById(R.id.fuelConsumedInput);
+        tripDateInput = findViewById(R.id.tripDateInput);
+        addFuelButton = findViewById(R.id.addFuelButton);
+        logTripButton = findViewById(R.id.logTripButton);
+
+        addFuelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                addFuel();
+            }
+        });
+
+        logTripButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                logTrip();
+            }
+        });
+    }
+
+    private void addFuel() {
+        String boatName = boatNameInput.getText().toString();
+        int fuelPicked = Integer.parseInt(fuelPickedInput.getText().toString());
+
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("boat_name", boatName);
+        values.put("fuel_picked", fuelPicked);
+        values.put("fuel_remaining", fuelPicked);
+
+        long newRowId = db.insert(DatabaseHelper.TABLE_BOATS, null, values);
+
+        if (newRowId != -1) {
+            Toast.makeText(this, "Fuel added for " + boatName, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Error adding fuel", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void logTrip() {
+        String boatName = boatNameInput.getText().toString();
+        int fuelConsumed = Integer.parseInt(fuelConsumedInput.getText().toString());
+        String tripDate = tripDateInput.getText().toString();
+
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        Cursor cursor = db.query(DatabaseHelper.TABLE_BOATS,
+                new String[]{"id", "fuel_remaining"},
+                "boat_name=?",
+                new String[]{boatName}, null, null, null);
+
+        if (cursor != null && cursor.moveToFirst()) {
+            int boatId = cursor.getInt(cursor.getColumnIndex("id"));
+            int fuelRemaining = cursor.getInt(cursor.getColumnIndex("fuel_remaining")) - fuelConsumed;
+
+            ContentValues tripValues = new ContentValues();
+            tripValues.put("boat_id", boatId);
+            tripValues.put("trip_date", tripDate);
+            tripValues.put("fuel_consumed", fuelConsumed);
+
+            db.insert(DatabaseHelper.TABLE_TRIPS, null, tripValues);
+
+            ContentValues boatValues = new ContentValues();
+            boatValues.put("fuel_remaining", fuelRemaining);
+
+            db.update(DatabaseHelper.TABLE_BOATS, boatValues, "id=?", new String[]{String.valueOf(boatId)});
+            Toast.makeText(this, "Trip logged for " + boatName, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Boat not found", Toast.LENGTH_SHORT).show();
+        }
+    }
+}
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/boatNameInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Boat Name" />
+
+    <EditText
+        android:id="@+id/fuelPickedInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Fuel Picked (Liters)"
+        android:inputType="number" />
+
+    <Button
+        android:id="@+id/addFuelButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Add Fuel" />
+
+    <EditText
+        android:id="@+id/fuelConsumedInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Fuel Consumed (Liters)"
+        android:inputType="number" />
+
+    <EditText
+        android:id="@+id/tripDateInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Trip Date"
+        android:inputType="date" />
+
+    <Button
+        android:id="@+id/logTripButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Log Trip" />
+</LinearLayout>
